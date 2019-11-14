@@ -1,5 +1,6 @@
 {
     "compilerOptions": {
+        "baseUrl": ".",
         "target": "es2015",
         "module": "commonjs",
         "moduleResolution": "node",
@@ -11,18 +12,14 @@
         "diagnostics": false,
         "listFiles": false,
         "outDir": "distr",
-        "noEmitOnError": false
+        "noEmitOnError": false,
+        "strict": true
     },
     "include": [
         "src/**/*.ts",
         "test/**/*.ts",
-        "node_modules/@types"
     ],
     "exclude": [
-        "/Local/**",
-        "bin",
-        "app",
-        "out",
-        "distr"
+      "./types"
     ]
 }

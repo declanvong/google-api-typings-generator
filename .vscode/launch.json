@@ -7,7 +7,7 @@
 			"program": "${workspaceRoot}/distr/google-api-typings-generator.js",
 			"stopOnEntry": false,
 			"args": [
-				"--out", "D:\\Projects\\GitHub\\DefinitelyTyped\\types"
+        "--out", "./types",
 			],
 			"cwd": "${workspaceRoot}",
 			"runtimeExecutable": null,
@@ -19,16 +19,6 @@
 			},
 			"sourceMaps": true,
 			"smartStep": true
-		},
-		{
-			"name": "Attach",
-			"type": "node",
-			"request": "attach",
-			"port": 5858,
-			"sourceMaps": false,
-			"outDir": null,
-			"localRoot": "${workspaceRoot}",
-			"remoteRoot": null
 		}
 	]
 }

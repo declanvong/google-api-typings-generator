@@ -1,12 +1,7 @@
-/// <reference path="../src/google-api-typings-generator.ts" />
-/// <reference path="../out/typings/gapi.client.youtube-v3/gapi.client.youtube.d.ts" />
-/// <reference path="../out/typings/gapi.client.gmail-v1/gapi.client.gmail.d.ts" />
-
-import { App } from "../src/google-api-typings-generator.ts";
-import "jasmine";
-import * as _ from "lodash";
 import * as assert from 'assert';
-
+import 'jasmine';
+import * as _ from 'lodash';
+import { App } from '../google-api-typings-generator';
 
 describe("version parser", () => {
     var expectations = {

@@ -3,20 +3,18 @@
   "description": "Google API Typescript typings definitions generator",
   "main": "generator.ts",
   "scripts": {
-    "start": "ts-node src/google-api-typings-generator.ts --out D:\\Projects\\GitHub\\DefinitelyTyped\\types",
+    "start": "ts-node src/google-api-typings-generator.ts --out ./types",
     "tsc": "tsc -p .",
-    "test": "mocha tests/tests.ts --require ts-node/register"
+    "test": "ts-mocha src/tests/tests.ts"
   },
   "devDependencies": {
-    "@types/commander": "^2.9.1",
-    "@types/dot": "^1.1.2",
-    "@types/form-data": "0.0.33",
-    "@types/lodash": "^4.14.69",
-    "@types/request": "0.0.47",
+    "@types/mocha": "^5.2.7",
+    "@types/node": "^12.12.7",
     "jasmine": "^2.4.1",
-    "mocha": "^2.4.5",
-    "ts-node": "^3.3.0",
-    "typescript": "^2.5.3"
+    "mocha": "^6.2.2",
+    "ts-mocha": "^6.0.0",
+    "ts-node": "^8.5.0",
+    "typescript": "^3.7.2"
   },
   "dependencies": {
     "commander": "^2.11.0",
