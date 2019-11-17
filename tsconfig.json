@@ -1,6 +1,5 @@
 {
     "compilerOptions": {
-        "baseUrl": ".",
         "target": "es2015",
         "module": "commonjs",
         "moduleResolution": "node",
@@ -17,7 +16,7 @@
     },
     "include": [
         "src/**/*.ts",
-        "test/**/*.ts",
+        "test/**/*.ts"
     ],
     "exclude": [
       "./types"

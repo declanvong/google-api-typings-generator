@@ -79,7 +79,7 @@ const irregylarSpaces = [
 ];
 
 class IndentedTextWriter {
-    constructor(private writer: ITextWriter, public newLine = "\r\n", public tabString = "    ") {
+    constructor(private writer: ITextWriter, public newLine = "\n", public tabString = "    ") {
 
     }
 
@@ -167,8 +167,11 @@ class TypescriptTextWriter implements ITypescriptTextWriter {
         this.braces(`declare namespace ${name}`, context);
     }
 
+    public emptyType(name: string) {
+        this.writer.writeLine(`type ${name} = {};`);
+    }
+
     public interface(name: string, context: TypescriptWriterCallback) {
-        // this.writer.writeLine();
         this.braces(`interface ${name}`, context);
     }
 
@@ -180,7 +183,12 @@ class TypescriptTextWriter implements ITypescriptTextWriter {
         this.writer.startIndentedLine("}");
     }
 
-    public newLine(chunk: string) {
+    public beginNewLine(chunk?: string) {
+        this.writer.write(this.writer.newLine);
+        this.writer.startIndentedLine(chunk);
+    }
+
+    public beginLine(chunk?: string) {
         this.writer.startIndentedLine(chunk);
     }
 
@@ -191,7 +199,6 @@ class TypescriptTextWriter implements ITypescriptTextWriter {
 
     public scope(context: TypescriptWriterCallback, startTag = "{", endTag = "}") {
         this.writer.write(startTag);
-        this.writer.write(this.writer.newLine);
         this.writer.indent++;
         context(this);
         this.writer.indent--;
@@ -211,7 +218,7 @@ class TypescriptTextWriter implements ITypescriptTextWriter {
 
     }
 
-    public comment(text: string = "") {
+    public comment(text: string = "", avoidTrailingNewline: boolean = false) {
         if (!text || text === "") {
             return;
         }
@@ -249,11 +256,25 @@ class TypescriptTextWriter implements ITypescriptTextWriter {
         }
 
         if (lines.length == 1) {
-            this.writer.writeLine(`/** ${lines[0]} */`);
+            const writeLine = avoidTrailingNewline
+                ? this.beginLine
+                : this.writeLine;
+            writeLine.bind(this)(`/** ${lines[0]} */`);
         } else if (lines.length > 1) {
-            this.writer.writeLine(`/**`);
-            _.forEach(lines, line => line ? this.writer.writeLine(` * ${line}`) : this.writer.writeLine(` *`));
-            this.writer.writeLine(` */`);
+            this.writeLine(`/**`);
+            lines.forEach((line, i) => {
+                const writeLine = avoidTrailingNewline
+                    ? i === lines.length - 1
+                        ? this.writeLine
+                        : this.beginLine
+                    : this.writeLine;
+                if (line) {
+                    writeLine.bind(this)(` * ${line}`);
+                } else {
+                    writeLine.bind(this)(` *`);
+                };
+            });
+            this.writeLine(` */`);
         }
     }
 
@@ -279,11 +300,6 @@ class TypescriptTextWriter implements ITypescriptTextWriter {
 
         this.endLine();
         //this.writer.writeLine(`${name}(${parameters.map(p => p.parameter + ": " + p.type).join(", ")}): ${returnType};`);
-    }
-
-    public beginNewLine() {
-        this.writer.write(this.writer.newLine);
-        this.writer.startIndentedLine();
     }
 
     public writeLine(chunk = "") {
@@ -395,7 +411,8 @@ function getType(type: gapi.client.discovery.JsonSchema, schemas: Record<string,
         }
     }
     else if (type.type) {
-        return typesMap[type.type] || type.type;
+        const t = typesMap[type.type] || type.type;
+        return type.repeated ? `${t} | ${t}[]` : t;
     }
     else if (type.$ref) {
         checkExists(schemas);
@@ -421,11 +438,11 @@ function getMethodReturn(method: gapi.client.discovery.RestMethod, schemas: Reco
     const name = schemas["Request"] ? "client.Request" : "Request";
 
     if (method.response) {
-        checkExists(method.response.$ref);
-        const schema = schemas[method.response.$ref];
+        const schemaName = method.response.$ref;
+        const schema = schemaName && schemas[schemaName];
 
-        if (schema && !_.isEmpty(schema.properties)) {
-            return `${name}<${method.response.$ref}>`;
+        if (schema && !isEmptySchema(schema)) {
+            return `${name}<${schemaName}>`;
         } else {
             return `${name}<{}>`;
         }
@@ -534,9 +551,16 @@ export class App {
 
                 forEachOrdered(resource.methods, (method, name) => {
                     method.description && out.comment(formatComment(method.description));
-                    const requestBody = method.request && method.request.$ref
-                        ? [{ parameter: 'body', type: method.request.$ref }]
-                        : [];
+                    let requestBody: ({ parameter: string, type: string })[] = [];
+                    const schemaName = method.request?.$ref;
+                    if (schemaName) {
+                        checkExists(schemas);
+                        const schema = schemas[schemaName];
+                        requestBody.push({
+                            parameter: 'body',
+                            type: isEmptySchema(schema) ? 'any' : schemaName,
+                        });
+                    }
                     checkExists(method.id, 'method', 'id');
                     out.method(getName(method.id), [{
                         parameter: "request",
@@ -562,10 +586,6 @@ export class App {
             });
 
         });
-    }
-
-    private getTypingsUrl(api: string, version: string) {
-        return `https://github.com/bolisov/typings-gapi/typings/${this.getTypingsName(api, version)}`;
     }
 
     private getTypingsName(api: string, version: string) {
@@ -597,7 +617,7 @@ export class App {
             writer = new TypescriptTextWriter(new IndentedTextWriter(new StreamWriter(stream))),
             rootNamespace = `gapi.client.${api.name}`;
 
-        writer.writeLine(`// Type definitions for ${api.ownerName} ${api.title} ${api.version} ${convertVersion(api.version || '')}`);
+        writer.writeLine(`// Type definitions for non-npm package ${api.ownerName} ${api.title} ${api.version} ${convertVersion(api.version || '')}`);
         writer.writeLine(`// Project: ${api.documentationLink}`);
         writer.writeLine(`// Definitions by: Bolisov Alexey <https://github.com/Bolisov>`);
         writer.writeLine(`//                 Declan Vong <https://github.com/declanvong>`);
@@ -605,6 +625,7 @@ export class App {
         writer.writeLine(`// TypeScript Version: 3.7`);
         writer.writeLine();
         writer.writeLine(`// IMPORTANT`);
+        writer.writeLine(`// These definitions are for the Google API Javascript Client: https://github.com/google/google-api-javascript-client`);
         writer.writeLine(`// This file was generated by https://github.com/declanvong/google-api-typings-generator. Please do not edit it manually.`);
         writer.writeLine(`// In case of any problems please post issue to https://github.com/declanvong/google-api-typings-generator`);
         writer.writeLine(`// Generated from: ${url}`);
@@ -636,18 +657,19 @@ export class App {
             writer.namespace(api.name, () => {
 
                 forEachOrdered(api.schemas, (schema, key) => {
-
                     checkExists(schema.id);
-                    writer.interface(schema.id, () => {
-                        forEachOrdered(schema.properties, (data, key) => {
-                            data.description && writer.comment(formatComment(data.description));
-                            writer.property(key, getType(data, api.schemas), data.required || false);
-                        });
+                    if (!isEmptySchema(schema)) {
+                        writer.interface(schema.id, () => {
+                            forEachOrdered(schema.properties, (data, key) => {
+                                data.description && writer.comment(formatComment(data.description));
+                                writer.property(key, getType(data, api.schemas), data.required || false);
+                            });
 
-                        if (schema.additionalProperties) {
-                            writer.property("[key: string]", getType(schema.additionalProperties, api.schemas));
-                        }
-                    });
+                            if (schema.additionalProperties) {
+                                writer.property("[key: string]", getType(schema.additionalProperties, api.schemas));
+                            }
+                        });
+                    }
                 });
 
                 this.writeResources(writer, api.resources, api.parameters, api.schemas);
@@ -655,7 +677,7 @@ export class App {
                 forEachOrdered(api.resources, (resource, resourceName) => {
                     if (resourceName !== "debugger") {
                         writer.endLine();
-                        writer.writeLine(`const ${resourceName}: ${api.name}.${this.getResourceTypeName(resourceName)};`);
+                        writer.writeLine(`const ${resourceName}: ${this.getResourceTypeName(resourceName)};`);
                     }
                 });
             });
@@ -780,7 +802,7 @@ export class App {
         }
 
         scope.scope(() => {
-            scope.newLine('');
+            scope.beginNewLine();
             if (schemaName) {
                 this.writeSchemaRef(scope, api, schemaName);
             } else {
@@ -804,7 +826,7 @@ export class App {
         } else if (object.additionalProperties) {
             // Otherwise, we have a Record<K, V> and we should write a placeholder key
             scope.scope(() => {
-                scope.newLine(`A: `);
+                scope.beginNewLine(`A: `);
                 if (schemaName) {
                     this.writeSchemaRef(scope, api, schemaName);
                 } else {
@@ -837,7 +859,7 @@ export class App {
 
     private writeProperties(scope: TypescriptTextWriter, api: gapi.client.discovery.RestDescription, record: Record<string, gapi.client.discovery.JsonSchema>) {
         forEachOrdered(record, (parameter, name) => {
-            scope.newLine(`${formatPropertyName(name)}: `);
+            scope.beginNewLine(`${formatPropertyName(name)}: `);
             if (parameter.type === 'object') {
                 this.writeObject(scope, api, parameter);
             } else if (parameter.$ref) {
@@ -845,14 +867,15 @@ export class App {
             } else {
                 this.writePropertyValue(scope, api, parameter);
             }
-            scope.endLine(`,`);
+            scope.write(`,`);
         });
     }
 
     private writeResourceTests(scope: TypescriptTextWriter, api: gapi.client.discovery.RestDescription, ancestors: string, resourceName: string, resource: gapi.client.discovery.RestResource) {
         for (const methodName in resource.methods) {
+            scope.endLine();
             scope.comment(resource.methods[methodName].description);
-            scope.newLine(`await ${ancestors}.${resourceName}.${methodName}(`);
+            scope.beginLine(`await ${ancestors}.${resourceName}.${methodName}(`);
             const params = resource.methods![methodName].parameters;
             if (params) {
                 scope.scope(() => {
@@ -865,7 +888,7 @@ export class App {
                 this.writeSchemaRef(scope, api, ref);
             }
 
-            scope.endLine(`);`);
+            scope.write(`);`);
 
             for (const subResource in resource.resources) {
                 this.writeResourceTests(scope, api, `${ancestors}.${resourceName}`, subResource, resource.resources[subResource]);
@@ -884,11 +907,13 @@ export class App {
 **/`);
 
         writer.writeLine();
-        writer.newLine("gapi.load('client', () => ");
+        writer.beginLine("gapi.load('client', () => ");
         writer.scope((writer3) => {
+            writer3.endLine();
             writer3.comment("now we can use gapi.client");
-            writer3.newLine(`gapi.client.load('${api.name}', '${api.version}', () => `);
+            writer3.beginLine(`gapi.client.load('${api.name}', '${api.version}', () => `);
             writer3.scope((writer2) => {
+                writer3.endLine();
                 writer3.comment(`now we can use gapi.client.${api.name}`);
                 writer3.endLine();
                 if (api.auth) {
@@ -896,47 +921,47 @@ export class App {
                     writer3.comment(`declare client_id registered in Google Developers Console`);
 
                     writer3.writeLine(`const client_id = '<<PUT YOUR CLIENT ID HERE>>';`);
-                    writer3.newLine(`const scope = `);
+                    writer3.beginLine(`const scope = `);
                     writer3.scope((scope) => {
                         for (var a in api.auth!.oauth2!.scopes) {
+                            writer3.endLine();
                             writer3.comment(api.auth!.oauth2!.scopes[a].description);
-                            writer3.writeLine(`'${a}',`);
+                            writer3.beginLine(`'${a}',`);
                         }
                     }, "[", "]");
 
                     writer3.endLine(';');
                     writer3.writeLine(`const immediate = true;`)
-                    writer3.newLine(`gapi.auth.authorize({ client_id, scope, immediate }, authResult => `);
+                    writer3.beginNewLine(`gapi.auth.authorize({ client_id, scope, immediate }, authResult => `);
 
                     writer3.scope((scope) => {
-                        writer3.newLine(`if (authResult && !authResult.error) `);
+                        writer3.beginNewLine(`if (authResult && !authResult.error) `);
                         scope.scope((a) => {
+                            a.endLine();
                             a.comment(`handle succesfull authorization`);
-                            a.writeLine(`run();`);
+                            a.beginLine(`run();`);
                         });
                         scope.write(` else `);
                         scope.scope(() => {
-                            scope.comment(`handle authorization error`);
+                            scope.endLine();
+                            scope.comment(`handle authorization error`, true);
                         });
-                        writer3.endLine();
                     });
 
                     writer3.endLine(");");
                 }
 
-                writer3.writeLine(`run();`);
+                writer3.beginLine(`run();`);
             });
 
             writer3.endLine(");");
             writer3.endLine();
-            writer3.newLine(`async function run() `);
+            writer3.beginLine(`async function run() `);
             writer.scope((scope) => {
                 for (const resourceName in api.resources) {
                     this.writeResourceTests(scope, api, `gapi.client.${api.name}`, resourceName, api.resources[resourceName]);
                 }
             });
-
-            writer3.endLine();
         });
         writer.endLine(");");
     }
